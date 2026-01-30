@@ -1,4 +1,6 @@
 pypdf
 ollama
 pinecone
-dotenv
+python-dotenv
+flask
+streamlit

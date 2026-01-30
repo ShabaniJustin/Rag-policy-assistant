@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RAG Policy Assistant</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <div class="chat-container">
+        <header class="chat-header">
+            <div class="header-content">
+                <div class="logo">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+                    </svg>
+                </div>
+                <div class="header-text">
+                    <h1>RAG Policy Assistant</h1>
+                    <p id="headerSubtext">Upload a PDF to get started</p>
+                </div>
+            </div>
+            <div class="status-indicator" id="statusIndicator">
+                <span class="status-dot"></span>
+                <span class="status-text">Online</span>
+            </div>
+        </header>
+
+        <main class="chat-messages" id="chatMessages">
+            <!-- Upload Section -->
+            <div class="upload-section" id="uploadSection">
+                <div class="upload-icon">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                        <polyline points="14 2 14 8 20 8"></polyline>
+                        <line x1="12" y1="18" x2="12" y2="12"></line>
+                        <line x1="9" y1="15" x2="15" y2="15"></line>
+                    </svg>
+                </div>
+                <h2>Upload Your PDF Document</h2>
+                <p>Upload any PDF file to start asking questions about its content</p>
+                <div class="upload-area" id="uploadArea">
+                    <input type="file" id="pdfInput" accept=".pdf" hidden>
+                    <button class="upload-btn" id="uploadBtn">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                            <polyline points="17 8 12 3 7 8"></polyline>
+                            <line x1="12" y1="3" x2="12" y2="15"></line>
+                        </svg>
+                        Choose PDF File
+                    </button>
+                    <p class="upload-hint">or drag and drop your PDF here</p>
+                </div>
+                <div class="upload-progress" id="uploadProgress" style="display: none;">
+                    <div class="progress-bar">
+                        <div class="progress-fill" id="progressFill"></div>
+                    </div>
+                    <p id="uploadStatus">Processing document...</p>
+                </div>
+            </div>
+
+            <!-- Welcome Message (shown after upload) -->
+            <div class="welcome-message" id="welcomeMessage" style="display: none;">
+                <div class="welcome-icon">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="12" cy="12" r="10"></circle>
+                        <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path>
+                        <line x1="12" y1="17" x2="12.01" y2="17"></line>
+                    </svg>
+                </div>
+                <h2>Document Ready!</h2>
+                <p>Your document has been processed. Try asking questions like:</p>
+                <div class="suggestion-chips">
+                    <button class="chip" onclick="sendSuggestion('What is this document about?')">What is this about?</button>
+                    <button class="chip" onclick="sendSuggestion('Summarize the key points')">Key points</button>
+                    <button class="chip" onclick="sendSuggestion('What are the main topics covered?')">Main topics</button>
+                </div>
+                <button class="upload-new-btn" id="uploadNewBtn">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                        <polyline points="17 8 12 3 7 8"></polyline>
+                        <line x1="12" y1="3" x2="12" y2="15"></line>
+                    </svg>
+                    Upload Different PDF
+                </button>
+            </div>
+        </main>
+
+        <footer class="chat-input-container">
+            <form id="chatForm" class="chat-form">
+                <div class="input-wrapper">
+                    <textarea
+                        id="userInput"
+                        placeholder="Upload a PDF first to start chatting..."
+                        rows="1"
+                        disabled
+                    ></textarea>
+                    <button type="submit" id="sendButton" title="Send message" disabled>
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <line x1="22" y1="2" x2="11" y2="13"></line>
+                            <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+                        </svg>
+                    </button>
+                </div>
+            </form>
+            <p class="disclaimer">Responses are generated based on your uploaded document. Always verify important information.</p>
+        </footer>
+    </div>
+
+    <script src="{{ url_for('static', filename='js/chat.js') }}"></script>
+</body>
+</html>
