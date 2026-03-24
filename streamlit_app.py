@@ -5,6 +5,7 @@ from chunker import chunk_pages
 from embedder import embed_chunks, embed_User_query
 from vectorstore import store_in_pinecone, search_in_pinecone
 from llm import query_llm_with_context
+from guardrails import validate_input, validate_context, validate_output, log_successful_interaction
 
 # Page config
 st.set_page_config(
@@ -79,6 +80,14 @@ else:
         with st.chat_message("assistant"):
             with st.spinner("Thinking..."):
                 try:
+                    # ── G1: Input guardrail ──────────────────────────────
+                    input_check = validate_input(prompt)
+                    if not input_check["allowed"]:
+                        reply = f"⚠️ {input_check['reason']}"
+                        st.warning(reply)
+                        st.session_state.messages.append({"role": "assistant", "content": reply})
+                        st.stop()
+
                     # Embed query
                     query_vector = embed_User_query(prompt)
 
@@ -88,11 +97,29 @@ else:
                         namespace=st.session_state.namespace
                     )
 
+                    # ── G2: Context guardrail ────────────────────────────
+                    context_check = validate_context(matched_chunks)
+                    if not context_check["sufficient"]:
+                        reply = f"ℹ️ {context_check['reason']}"
+                        st.info(reply)
+                        st.session_state.messages.append({"role": "assistant", "content": reply})
+                        st.stop()
+
                     # Generate response
                     response = query_llm_with_context(prompt, matched_chunks)
-                    st.markdown(response)
 
-                    # Save to history
-                    st.session_state.messages.append({"role": "assistant", "content": response})
+                    # ── G3: Output guardrail ─────────────────────────────
+                    output_check = validate_output(response, prompt)
+                    if not output_check["safe"]:
+                        reply = output_check["response"]
+                        st.warning(reply)
+                        st.session_state.messages.append({"role": "assistant", "content": reply})
+                        st.stop()
+
+                    # ── G4: Log clean interaction ────────────────────────
+                    log_successful_interaction(prompt, output_check["response"], output_check["flags"])
+
+                    st.markdown(output_check["response"])
+                    st.session_state.messages.append({"role": "assistant", "content": output_check["response"]})
                 except Exception as e:
                     st.error(f"Error: {str(e)}")

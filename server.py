@@ -5,6 +5,7 @@ from chunker import chunk_pages
 from embedder import embed_chunks, embed_User_query
 from vectorstore import store_in_pinecone, search_in_pinecone
 from llm import query_llm_with_context
+from guardrails import validate_input, validate_output, log_successful_interaction
 
 app = Flask(__name__, template_folder='templates', static_folder='static')
 app.secret_key = 'rag-policy-assistant-secret-key'
@@ -31,6 +32,14 @@ def upload_pdf():
 
         if not pdf_file.filename.lower().endswith('.pdf'):
             return jsonify({'error': 'File must be a PDF'}), 400
+
+        # ── G1: Input guardrail — file size check ─────────────────────
+        pdf_file.seek(0, 2)          # seek to end
+        file_size = pdf_file.tell()
+        pdf_file.seek(0)             # reset to beginning
+        MAX_FILE_SIZE = 10 * 1024 * 1024  # 10 MB
+        if file_size > MAX_FILE_SIZE:
+            return jsonify({'error': 'File too large. Maximum size is 10 MB.'}), 400
 
         # Get or create session namespace
         if 'namespace' not in session:
@@ -70,6 +79,15 @@ def chat():
 
         if not session.get('pdf_uploaded'):
             return jsonify({'error': 'Please upload a PDF document first'}), 400
+        
+         # ── G1: Input guardrail ──────────────────────────────────────
+        input_check = validate_input(user_query)
+        if not input_check["allowed"]:
+            return jsonify({
+                'response': f"⚠️ {input_check['reason']}",
+                'status': 'blocked',
+                'guardrail': 'input'
+            }), 200   # 200 so frontend renders it as a chat message
 
         namespace = session.get('namespace', '')
 
@@ -79,12 +97,35 @@ def chat():
         # Search vector DB for matching chunks
         matched_chunks = search_in_pinecone(query_vector, namespace=namespace)
 
+        # ── G2: Context guardrail ────────────────────────────────────
+        from guardrails import validate_context
+        context_check = validate_context(matched_chunks)
+        if not context_check["sufficient"]:
+            return jsonify({
+                'response': f"ℹ️ {context_check['reason']}",
+                'status': 'no_context',
+                'guardrail': 'context'
+            }), 200
+
         # Generate response using LLM
         response = query_llm_with_context(user_query, matched_chunks)
 
+        # ── G3: Output guardrail ─────────────────────────────────────
+        output_check = validate_output(response, user_query)
+        if not output_check["safe"]:
+            return jsonify({
+                'response': output_check["response"],
+                'status': 'output_blocked',
+                'guardrail': 'output'
+            }), 200
+
+        # ── G4: Log clean interaction ────────────────────────────────
+        log_successful_interaction(user_query, output_check["response"], output_check["flags"])
+
         return jsonify({
-            'response': response,
-            'status': 'success'
+            'response': output_check["response"],
+            'status': 'success',
+            'flags': output_check["flags"]       # visible in browser devtools for demo
         })
 
     except Exception as e:

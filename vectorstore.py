@@ -41,5 +41,8 @@ def search_in_pinecone(query_vector: List[float], top_k: int = 4, namespace: str
     print(f"Found {len(results.matches)} matches for the query.")
     matched_chunks = []
     for match in results.matches:
-        matched_chunks.append(match.metadata.get("text", ""))
+        matched_chunks.append({
+            "text": match.metadata.get("text", ""),
+            "score": match.score
+        })
     return matched_chunks

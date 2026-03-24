@@ -13,19 +13,101 @@ A Retrieval-Augmented Generation (RAG) chatbot for querying PDF documents using 
 
 ## Architecture
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                    Document Ingestion Pipeline                   │
-├─────────────────────────────────────────────────────────────────┤
-│  PDF Upload → PDF Reader → Chunker → Embedder → Pinecone        │
-└─────────────────────────────────────────────────────────────────┘
+### Document Ingestion Pipeline
 
-┌─────────────────────────────────────────────────────────────────┐
-│                    Query Processing Pipeline                     │
-├─────────────────────────────────────────────────────────────────┤
-│  User Query → Embedder → Pinecone Search → LLM (Gemma) → Response│
-└─────────────────────────────────────────────────────────────────┘
 ```
+PDF Upload → PDF Reader → Chunker → Embedder → Pinecone
+```
+
+### Query Processing Pipeline with Guardrails
+
+```
+                        ┌─────────────────────┐
+                        │      User Query      │
+                        └──────────┬──────────┘
+                                   │
+                    ┌──────────────▼──────────────┐
+                    │     G1 — Input Guardrail     │ ──► Blocked
+                    │  Keyword filter · length     │
+                    │  check · topic relevance     │
+                    └──────────────┬──────────────┘
+                                   │
+          ┌────────────────────────▼────────────────────────┐
+          │             RAG Pipeline (existing)              │
+          │                                                  │
+          │  Embed query → Pinecone search                   │
+          │                        │                         │
+          │           ┌────────────▼────────────┐            │
+          │           │  G2 — Context Check     │            │
+          │           │  Confidence score ·     │            │
+          │           │  fallback               │            │
+          │           └────────────┬────────────┘            │
+          │                        │                         │
+          │                  LLM (Gemma)                     │
+          └────────────────────────┬────────────────────────┘
+                                   │
+                    ┌──────────────▼──────────────┐
+                    │    G3 — Output Guardrail     │ ──► Flagged
+                    │  Hallucination check ·       │
+                    │  PII scrub · length trim     │
+                    └──────────────┬──────────────┘
+                                   │
+                    ┌──────────────▼──────────────┐
+                    │    G4 — Observability Log    │
+                    │  Query · score · action ·    │
+                    │  timestamp → guardrail.jsonl │
+                    └──────────────┬──────────────┘
+                                   │
+                        ┌──────────▼──────────┐
+                        │  Safe Response to   │
+                        │       User          │
+                        └─────────────────────┘
+```
+
+## Guardrail System
+
+The assistant uses 4 guardrail layers implemented in `guardrails.py` — pure Python, no external guardrail frameworks required.
+
+### G1 — Input Guardrail
+Validates every user query **before** it enters the RAG pipeline.
+
+| Check | Detail |
+|---|---|
+| Empty query | Rejects blank input |
+| Length limit | Max 500 characters |
+| Prompt injection | Blocks patterns like `ignore previous instructions`, `act as`, `jailbreak` |
+| Sensitive keywords | Blocks off-topic queries containing `password`, `hack`, `credit card`, `ssn`, etc. |
+
+Also applied to `/api/upload`: rejects files larger than **10 MB**.
+
+### G2 — Context Confidence Guardrail
+Runs **inside `llm.py`** between Pinecone search and the LLM call. Prevents the LLM from being called with irrelevant or empty context.
+
+| Check | Detail |
+|---|---|
+| No chunks returned | Rejects if Pinecone returns nothing |
+| Low similarity score | Rejects if top chunk score < `0.5` (cosine similarity) |
+
+> Without G2, Pinecone always returns the closest vectors it has — even for completely unrelated queries. The LLM has no access to the similarity score and may hallucinate a confident-sounding answer from irrelevant context. G2 catches this before the LLM is ever called.
+
+### G3 — Output Guardrail
+Validates the LLM response **before** it is sent to the user.
+
+| Check | Detail |
+|---|---|
+| PII scrubbing | Redacts emails, phone numbers, Aadhaar numbers |
+| Hallucination signals | Detects phrases like `as a language model`, `my training data` and appends a warning |
+| Length trim | Truncates responses longer than 1500 characters |
+| Empty response | Replaces useless short responses with a fallback message |
+
+### G4 — Observability Logger
+Every guardrail event is appended as a structured JSON line to `guardrail_log.jsonl`.
+
+```json
+{"timestamp": "2026-03-24T10:30:00", "event": "INPUT_BLOCKED", "query_preview": "ignore previous inst...", "reason": "Prompt injection attempt", "response_preview": ""}
+```
+
+Event types: `INPUT_BLOCKED`, `INPUT_FLAGGED`, `OUTPUT_FLAGGED`, `INTERACTION_OK`
 
 ## Tech Stack
 
@@ -170,8 +252,10 @@ RAG-Policy-Assistant/
 ├── pdfreader.py        # PDF text extraction
 ├── chunker.py          # Text chunking with overlap
 ├── embedder.py         # Ollama embedding generation
-├── vectorstore.py      # Pinecone operations
-├── llm.py              # LLM response generation
+├── vectorstore.py      # Pinecone operations (returns text + similarity score)
+├── llm.py              # LLM response generation with G2 context check
+├── guardrails.py       # G1 input · G2 context · G3 output · G4 logging
+├── guardrail_log.jsonl # Auto-generated audit log (not tracked)
 ├── requirements.txt    # Python dependencies
 ├── .env                # Environment variables (not tracked)
 ├── resources/
