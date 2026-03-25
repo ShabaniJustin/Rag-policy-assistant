@@ -3,7 +3,11 @@ import json
 import logging
 from datetime import datetime
 
-logging.basicConfig(filename="guardrail_log.jsonl", level=logging.INFO)
+logger = logging.getLogger("guardrails")
+logger.setLevel(logging.INFO)
+_fh = logging.FileHandler("guardrail_log.jsonl")
+_fh.setLevel(logging.INFO)
+logger.addHandler(_fh)
 
 # ── G1: Input Guardrail ─────────────────────────────────────────────────────
 
@@ -52,7 +56,7 @@ def validate_input(query: str) -> dict:
 
 # ── G2: Context Confidence Guardrail ────────────────────────────────────────
 
-MIN_CONTEXT_SCORE = 0.5   # Pinecone similarity score threshold
+MIN_CONTEXT_SCORE = 0.3   # Pinecone similarity score threshold
 MIN_CHUNKS_REQUIRED = 1
 
 def validate_context(matched_chunks: list) -> dict:
@@ -150,7 +154,7 @@ def _log_event(event_type: str, query: str, reason: str = "", response_preview: 
         "reason": reason,
         "response_preview": response_preview
     }
-    logging.info(json.dumps(entry))
+    logger.info(json.dumps(entry))
 
 def log_successful_interaction(query: str, response: str, flags: list):
     """Logs clean interactions for monitoring and audit."""

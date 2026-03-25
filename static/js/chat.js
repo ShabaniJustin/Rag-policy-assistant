@@ -113,7 +113,7 @@ document.addEventListener('DOMContentLoaded', function() {
             // Remove typing indicator
             typingIndicator.remove();
 
-            if (data.status === 'success') {
+            if (data.response) {
                 addMessage(data.response, 'bot');
             } else {
                 addErrorMessage(data.error || 'An error occurred. Please try again.');

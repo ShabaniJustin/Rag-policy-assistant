@@ -12,5 +12,11 @@ def read_pdf(pdf_path):
 def read_pdf_from_file(file_object):
     """Read PDF from a file-like object (for uploaded files)."""
     reader = PdfReader(file_object)
-    pages = [page.extract_text() for page in reader.pages]
+    pages = []
+    for page in reader.pages:
+        try:
+            text = page.extract_text() or ""
+        except Exception:
+            text = ""
+        pages.append(text)
     return pages

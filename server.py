@@ -80,7 +80,7 @@ def chat():
         if not session.get('pdf_uploaded'):
             return jsonify({'error': 'Please upload a PDF document first'}), 400
         
-         # ── G1: Input guardrail ──────────────────────────────────────
+        # ── G1: Input guardrail ──────────────────────────────────────
         input_check = validate_input(user_query)
         if not input_check["allowed"]:
             return jsonify({
@@ -97,17 +97,7 @@ def chat():
         # Search vector DB for matching chunks
         matched_chunks = search_in_pinecone(query_vector, namespace=namespace)
 
-        # ── G2: Context guardrail ────────────────────────────────────
-        from guardrails import validate_context
-        context_check = validate_context(matched_chunks)
-        if not context_check["sufficient"]:
-            return jsonify({
-                'response': f"ℹ️ {context_check['reason']}",
-                'status': 'no_context',
-                'guardrail': 'context'
-            }), 200
-
-        # Generate response using LLM
+        # Generate response using LLM (G2 context check runs inside llm.py)
         response = query_llm_with_context(user_query, matched_chunks)
 
         # ── G3: Output guardrail ─────────────────────────────────────

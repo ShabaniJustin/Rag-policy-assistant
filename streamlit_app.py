@@ -5,7 +5,7 @@ from chunker import chunk_pages
 from embedder import embed_chunks, embed_User_query
 from vectorstore import store_in_pinecone, search_in_pinecone
 from llm import query_llm_with_context
-from guardrails import validate_input, validate_context, validate_output, log_successful_interaction
+from guardrails import validate_input, validate_output, log_successful_interaction
 
 # Page config
 st.set_page_config(
@@ -97,15 +97,7 @@ else:
                         namespace=st.session_state.namespace
                     )
 
-                    # ── G2: Context guardrail ────────────────────────────
-                    context_check = validate_context(matched_chunks)
-                    if not context_check["sufficient"]:
-                        reply = f"ℹ️ {context_check['reason']}"
-                        st.info(reply)
-                        st.session_state.messages.append({"role": "assistant", "content": reply})
-                        st.stop()
-
-                    # Generate response
+                    # Generate response (G2 context check runs inside llm.py)
                     response = query_llm_with_context(prompt, matched_chunks)
 
                     # ── G3: Output guardrail ─────────────────────────────
